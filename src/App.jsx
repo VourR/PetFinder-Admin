@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const API_BASE_URL = 'http://localhost:4000';
+const API_BASE_URL = "https://pet-finder-api.vercel.app";
 
 function App() {
   const [activeTab, setActiveTab] = useState('pets');
