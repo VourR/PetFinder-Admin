@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import InstallPWA from './components/InstallPWA';
 
 const API_BASE_URL = "https://pet-finder-api.vercel.app";
 
@@ -9,6 +10,7 @@ function App() {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [editMode, setEditMode] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [pets, setPets] = useState([]);
   const [shelters, setShelters] = useState([]);
@@ -309,9 +311,59 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-6xl mx-auto p-6">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <InstallPWA />
+      
+      {/* Mobile Header dengan Hamburger Menu */}
+      <div className="lg:hidden bg-white shadow-lg sticky top-0 z-40">
+        <div className="flex items-center justify-between p-4">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">Pet & Shelter</h1>
+            <p className="text-xs text-gray-600">Admin Panel</p>
+          </div>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 text-gray-600 hover:text-gray-800 focus:outline-none"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {mobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+        </div>
+        
+        {/* Mobile Menu Dropdown */}
+        {mobileMenuOpen && (
+          <div className="border-t border-gray-200 bg-white">
+            <button
+              onClick={() => { setActiveTab('pets'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-4 py-3 font-semibold transition-colors ${
+                activeTab === 'pets'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              🐾 Pets
+            </button>
+            <button
+              onClick={() => { setActiveTab('shelters'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-4 py-3 font-semibold transition-colors ${
+                activeTab === 'shelters'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              🏠 Shelters
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="max-w-6xl mx-auto p-4 lg:p-6">
+        {/* Desktop Header */}
+        <div className="hidden lg:block bg-white rounded-lg shadow-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Pet & Shelter Admin</h1>
           <p className="text-gray-600">Kelola data hewan peliharaan dan tempat penampungan</p>
         </div>
@@ -327,9 +379,9 @@ function App() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Desktop Tabs */}
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="flex border-b">
+          <div className="hidden lg:flex border-b">
             <button
               onClick={() => setActiveTab('pets')}
               className={`flex-1 py-4 px-6 font-semibold transition-colors ${
@@ -352,12 +404,12 @@ function App() {
             </button>
           </div>
 
-          <div className="p-8">
+          <div className="p-4 lg:p-8">
             {/* View Toggle */}
-            <div className="mb-6 flex gap-4">
+            <div className="mb-6 flex flex-col sm:flex-row gap-2 sm:gap-4">
               <button
                 onClick={() => { setView('list'); resetForms(); }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
                   view === 'list'
                     ? 'bg-indigo-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -367,7 +419,7 @@ function App() {
               </button>
               <button
                 onClick={() => { setView('form'); resetForms(); }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
                   view === 'form'
                     ? 'bg-indigo-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -393,33 +445,33 @@ function App() {
                     ) : (
                       pets.map((pet) => (
                         <div key={pet.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                          <div className="flex items-start gap-4">
+                          <div className="flex flex-col sm:flex-row items-start gap-4">
                             {pet.image_url && (
                               <img 
                                 src={pet.image_url} 
                                 alt={pet.name}
-                                className="w-24 h-24 object-cover rounded-lg"
+                                className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-lg"
                               />
                             )}
-                            <div className="flex-1">
+                            <div className="flex-1 w-full">
                               <h3 className="text-xl font-bold text-gray-800">{pet.name}</h3>
                               <p className="text-gray-600">Jenis: {pet.type}</p>
                               {pet.age && <p className="text-gray-600">Umur: {pet.age} tahun</p>}
-                              {pet.description && <p className="text-gray-600 mt-2">{pet.description}</p>}
+                              {pet.description && <p className="text-gray-600 mt-2 line-clamp-2">{pet.description}</p>}
                               <p className="text-sm text-gray-500 mt-1">
                                 Shelter: {shelters.find(s => s.id === pet.shelter_id)?.name || 'Unknown'}
                               </p>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
                               <button
                                 onClick={() => handleEdit('pets', pet)}
-                                className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm"
                               >
                                 ✏️ Edit
                               </button>
                               <button
                                 onClick={() => handleDelete('pets', pet.id, pet.name)}
-                                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
                               >
                                 🗑️ Hapus
                               </button>
@@ -438,30 +490,30 @@ function App() {
                     ) : (
                       shelters.map((shelter) => (
                         <div key={shelter.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                          <div className="flex items-start gap-4">
+                          <div className="flex flex-col sm:flex-row items-start gap-4">
                             {shelter.image_url && (
                               <img 
                                 src={shelter.image_url} 
                                 alt={shelter.name}
-                                className="w-24 h-24 object-cover rounded-lg"
+                                className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-lg"
                               />
                             )}
-                            <div className="flex-1">
+                            <div className="flex-1 w-full">
                               <h3 className="text-xl font-bold text-gray-800">{shelter.name}</h3>
                               <p className="text-gray-600">📍 {shelter.city}</p>
-                              {shelter.address && <p className="text-gray-600">{shelter.address}</p>}
+                              {shelter.address && <p className="text-gray-600 line-clamp-1">{shelter.address}</p>}
                               {shelter.phone && <p className="text-gray-600">📞 {shelter.phone}</p>}
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
                               <button
                                 onClick={() => handleEdit('shelters', shelter)}
-                                className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm"
                               >
                                 ✏️ Edit
                               </button>
                               <button
                                 onClick={() => handleDelete('shelters', shelter.id, shelter.name)}
-                                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
                               >
                                 🗑️ Hapus
                               </button>
@@ -478,7 +530,7 @@ function App() {
             {/* FORM VIEW */}
             {view === 'form' && (
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                <h2 className="text-xl lg:text-2xl font-bold text-gray-800 mb-6">
                   {editMode ? '✏️ Edit' : '➕ Tambah'} {activeTab === 'pets' ? 'Pet' : 'Shelter'}
                 </h2>
 
@@ -577,7 +629,7 @@ function App() {
                       />
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
                       <button
                         onClick={editMode ? handlePetUpdate : handlePetCreate}
                         disabled={loading}
@@ -587,7 +639,7 @@ function App() {
                       </button>
                       <button
                         onClick={() => { setView('list'); resetForms(); }}
-                        className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                        className="sm:w-auto px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
                       >
                         Batal
                       </button>
@@ -659,7 +711,7 @@ function App() {
                       />
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
                       <button
                         onClick={editMode ? handleShelterUpdate : handleShelterCreate}
                         disabled={loading}
@@ -669,7 +721,7 @@ function App() {
                       </button>
                       <button
                         onClick={() => { setView('list'); resetForms(); }}
-                        className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                        className="sm:w-auto px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
                       >
                         Batal
                       </button>
@@ -682,8 +734,8 @@ function App() {
         </div>
 
         {/* Footer Info */}
-        <div className="mt-6 bg-white rounded-lg shadow-lg p-4">
-          <p className="text-sm text-gray-600 text-center">
+        <div className="mt-6 mb-20 lg:mb-6 bg-white rounded-lg shadow-lg p-4">
+          <p className="text-xs lg:text-sm text-gray-600 text-center break-all">
             API Base URL: <span className="font-mono text-indigo-600">{API_BASE_URL}</span>
           </p>
         </div>
