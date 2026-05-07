@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import InstallPWA from './components/InstallPWA';
 
-const API_BASE_URL = "https://paw-find-api.vercel.app/";
+const API_BASE_URL = "https://paw-find-api.vercel.app";
 function App() {
   const [activeTab, setActiveTab] = useState('pets');
   const [view, setView] = useState('list'); // 'list' or 'form'
