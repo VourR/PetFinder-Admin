@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import InstallPWA from './components/InstallPWA';
 
-const API_BASE_URL = "https://pet-finder-api.vercel.app";
-
+const API_BASE_URL = "http://localhost:4000"; // Ganti dengan URL backend Anda
 function App() {
   const [activeTab, setActiveTab] = useState('pets');
   const [view, setView] = useState('list'); // 'list' or 'form'
@@ -15,6 +14,18 @@ function App() {
   const [pets, setPets] = useState([]);
   const [shelters, setShelters] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
+
+  // Admin auth & requests
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('adminToken') || null);
+  const [adminIdentity, setAdminIdentity] = useState(() => localStorage.getItem('adminIdentity') || '');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [adoptedPets, setAdoptedPets] = useState([]);
+  const [loadingAdoptedPets, setLoadingAdoptedPets] = useState(false);
+  const [requestsView, setRequestsView] = useState('pending'); // 'pending' or 'adopted'
+  const [requestNotes, setRequestNotes] = useState({});
 
   const [petForm, setPetForm] = useState({
     name: '',
@@ -36,6 +47,19 @@ function App() {
   const showMessage = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  };
+
+  const getReviewedByLabel = (request) => {
+    return (
+      request.reviewed_by ||
+      request.reviewedBy ||
+      request.reviewed_by_name ||
+      request.reviewed_by_email ||
+      request.reviewer_name ||
+      request.reviewer_email ||
+      adminIdentity ||
+      'Admin'
+    );
   };
 
   const resetForms = () => {
@@ -91,12 +115,158 @@ function App() {
     if (activeTab === 'pets') {
       fetchPets();
       fetchShelters();
-    } else {
+    } else if (activeTab === 'shelters') {
       fetchShelters();
+    } else if (activeTab === 'requests') {
+      fetchRequests();
+      fetchAdoptedPets();
     }
     setView('list');
     resetForms();
-  }, [activeTab]);
+  }, [activeTab, adminToken]);
+
+  // persist admin token
+  useEffect(() => {
+    if (adminToken) localStorage.setItem('adminToken', adminToken);
+    else localStorage.removeItem('adminToken');
+  }, [adminToken]);
+
+  useEffect(() => {
+    if (adminIdentity) localStorage.setItem('adminIdentity', adminIdentity);
+    else localStorage.removeItem('adminIdentity');
+  }, [adminIdentity]);
+
+  const adminLogin = async () => {
+    if (!adminEmail || !adminPassword) { showMessage('error', 'Email dan password wajib'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: adminEmail, password: adminPassword })
+      });
+      
+      const data = await res.json();
+      console.log('Login response:', data, 'Status:', res.status);
+      
+      if (!res.ok) {
+        const errorMsg = data.message || data.error || data.msg || 'Login gagal';
+        throw new Error(errorMsg);
+      }
+      
+      // Try various token field names
+      const token = data.token || data.accessToken || data.access_token || 
+                   (data.data && (data.data.token || data.data.accessToken || data.data.access_token));
+      
+      if (!token) {
+        console.error('Token not found in response:', data);
+        throw new Error('Token tidak diterima dari server');
+      }
+      
+      setAdminToken(token);
+      setAdminIdentity(adminEmail);
+      setAdminEmail(''); 
+      setAdminPassword('');
+      showMessage('success', 'Login berhasil');
+      setActiveTab('requests');
+    } catch (error) {
+      console.error('Login error:', error);
+      showMessage('error', `${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const adminLogout = () => {
+    setAdminToken(null);
+    setAdminIdentity('');
+    setRequests([]);
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminIdentity');
+    showMessage('success', 'Logged out');
+  };
+
+  const fetchRequests = async () => {
+    if (!adminToken) return;
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/adopted-pets/requests`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      if (!res.ok) throw new Error('Gagal mengambil requests');
+      const data = await res.json();
+      setRequests(data.data || data.requests || data || []);
+    } catch (error) {
+      showMessage('error', `Error: ${error.message}`);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const approveRequest = async (id, adminNotes = '') => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/adopted-pets/requests/${id}/approve`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          admin_notes: adminNotes,
+          notes: adminNotes,
+          reviewed_by: adminIdentity,
+          reviewed_by_email: adminIdentity
+        })
+      });
+      if (!res.ok) throw new Error('Approve gagal');
+      showMessage('success', 'Request disetujui');
+      setRequestNotes((prev) => ({ ...prev, [id]: '' }));
+      fetchRequests();
+    } catch (error) {
+      showMessage('error', `Error: ${error.message}`);
+    }
+  };
+
+  const rejectRequest = async (id, adminNotes = '') => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/adopted-pets/requests/${id}/reject`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          admin_notes: adminNotes,
+          notes: adminNotes,
+          reviewed_by: adminIdentity,
+          reviewed_by_email: adminIdentity
+        })
+      });
+      if (!res.ok) throw new Error('Reject gagal');
+      showMessage('success', 'Request ditolak');
+      setRequestNotes((prev) => ({ ...prev, [id]: '' }));
+      fetchRequests();
+    } catch (error) {
+      showMessage('error', `Error: ${error.message}`);
+    }
+  };
+
+  const fetchAdoptedPets = async () => {
+    if (!adminToken) return;
+    setLoadingAdoptedPets(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/adopted-pets`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      if (!res.ok) throw new Error('Gagal mengambil adopted pets');
+      const data = await res.json();
+      setAdoptedPets(data.data || data || []);
+    } catch (error) {
+      showMessage('error', `Error: ${error.message}`);
+    } finally {
+      setLoadingAdoptedPets(false);
+    }
+  };
 
   // CREATE
   const handlePetCreate = async () => {
@@ -309,6 +479,61 @@ function App() {
     }
   };
 
+  // Fullscreen login page jika belum login
+  if (!adminToken) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <InstallPWA />
+        <div className="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2 text-center">PawFind Admin</h1>
+          <p className="text-gray-600 text-center mb-8">Login untuk akses panel admin</p>
+          
+          {message.text && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${
+              message.type === 'success' 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {message.text}
+            </div>
+          )}
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input 
+                type="email" 
+                value={adminEmail} 
+                onChange={(e) => setAdminEmail(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && adminLogin()}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder="admin@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input 
+                type="password" 
+                value={adminPassword} 
+                onChange={(e) => setAdminPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && adminLogin()}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder="••••••••"
+              />
+            </div>
+            <button 
+              onClick={adminLogin}
+              disabled={loading}
+              className="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
+            >
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <InstallPWA />
@@ -317,21 +542,29 @@ function App() {
       <div className="lg:hidden bg-white shadow-lg sticky top-0 z-40">
         <div className="flex items-center justify-between p-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Pet & Shelter</h1>
+            <h1 className="text-xl font-bold text-gray-800">PawFind</h1>
             <p className="text-xs text-gray-600">Admin Panel</p>
           </div>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 text-gray-600 hover:text-gray-800 focus:outline-none"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {mobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={adminLogout}
+              className="p-2 text-red-600 hover:text-red-800 font-semibold text-sm"
+            >
+              Logout
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 text-gray-600 hover:text-gray-800 focus:outline-none"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
         
         {/* Mobile Menu Dropdown */}
@@ -357,15 +590,33 @@ function App() {
             >
               🏠 Shelters
             </button>
+            <button
+              onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-4 py-3 font-semibold transition-colors ${
+                activeTab === 'requests'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              📨 Requests
+            </button>
           </div>
         )}
       </div>
 
       <div className="max-w-6xl mx-auto p-4 lg:p-6">
         {/* Desktop Header */}
-        <div className="hidden lg:block bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Pet & Shelter Admin</h1>
-          <p className="text-gray-600">Kelola data hewan peliharaan dan tempat penampungan</p>
+        <div className="hidden lg:flex lg:justify-between lg:items-center bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">PawFind Admin</h1>
+            <p className="text-gray-600">Kelola data hewan peliharaan dan tempat penampungan</p>
+          </div>
+          <button
+            onClick={adminLogout}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
+          >
+            Logout
+          </button>
         </div>
 
         {/* Message Alert */}
@@ -402,125 +653,339 @@ function App() {
             >
               🏠 Shelters
             </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={`flex-1 py-4 px-6 font-semibold transition-colors ${
+                activeTab === 'requests'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              📨 Requests
+            </button>
           </div>
 
           <div className="p-4 lg:p-8">
             {/* View Toggle */}
             <div className="mb-6 flex flex-col sm:flex-row gap-2 sm:gap-4">
-              <button
-                onClick={() => { setView('list'); resetForms(); }}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
-                  view === 'list'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                📋 Daftar {activeTab === 'pets' ? 'Pets' : 'Shelters'}
-              </button>
-              <button
-                onClick={() => { setView('form'); resetForms(); }}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
-                  view === 'form'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                ➕ Tambah {activeTab === 'pets' ? 'Pet' : 'Shelter'}
-              </button>
+              {activeTab === 'requests' ? (
+                <>
+                  <button
+                    onClick={() => { setRequestsView('pending'); setView('list'); resetForms(); }}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
+                      requestsView === 'pending'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    📋 Daftar Requests
+                  </button>
+                  <button
+                    onClick={() => { setRequestsView('adopted'); setView('list'); resetForms(); }}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
+                      requestsView === 'adopted'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    ✓ Adopted Pets
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setView('list'); resetForms(); }}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
+                      view === 'list'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    📋 Daftar {activeTab === 'pets' ? 'Pets' : 'Shelters'}
+                  </button>
+                  <button
+                    onClick={() => { setView('form'); resetForms(); }}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium transition-colors ${
+                      view === 'form'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    ➕ Tambah {activeTab === 'pets' ? 'Pet' : 'Shelter'}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* LIST VIEW */}
             {view === 'list' && (
               <div>
-                {loadingData ? (
-                  <div className="text-center py-12 text-gray-500">
-                    Memuat data...
-                  </div>
-                ) : activeTab === 'pets' ? (
-                  <div className="space-y-4">
-                    {pets.length === 0 ? (
-                      <div className="text-center py-12 text-gray-500">
-                        Belum ada data pets. Tambahkan pet pertama!
-                      </div>
+                {activeTab === 'requests' ? (
+                  <div>
+                    {/* PENDING REQUESTS VIEW */}
+                    {requestsView === 'pending' && (
+                    <div>
+                    {loadingRequests ? (
+                      <div className="text-center py-12 text-gray-500">Memuat requests...</div>
+                    ) : requests.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">Belum ada request adopsi.</div>
                     ) : (
-                      pets.map((pet) => (
-                        <div key={pet.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                          <div className="flex flex-col sm:flex-row items-start gap-4">
-                            {pet.image_url && (
-                              <img 
-                                src={pet.image_url} 
-                                alt={pet.name}
-                                className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-lg"
-                              />
-                            )}
-                            <div className="flex-1 w-full">
-                              <h3 className="text-xl font-bold text-gray-800">{pet.name}</h3>
-                              <p className="text-gray-600">Jenis: {pet.type}</p>
-                              {pet.age && <p className="text-gray-600">Umur: {pet.age} tahun</p>}
-                              {pet.description && <p className="text-gray-600 mt-2 line-clamp-2">{pet.description}</p>}
-                              <p className="text-sm text-gray-500 mt-1">
-                                Shelter: {shelters.find(s => s.id === pet.shelter_id)?.name || 'Unknown'}
-                              </p>
+                      <div className="space-y-6">
+                        {requests.map((r) => (
+                          <div key={r.id} className="border border-gray-300 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow bg-white">
+                            {/* Status Badge */}
+                            <div className="flex items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-50 px-4 py-3 border-b">
+                              <h3 className="font-bold text-lg text-gray-800">Request ID: {r.id?.substring(0, 8)}</h3>
+                              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                r.status === 'pending' ? 'bg-yellow-200 text-yellow-800' :
+                                r.status === 'approved' ? 'bg-green-200 text-green-800' :
+                                'bg-red-200 text-red-800'
+                              }`}>
+                                {r.status === 'pending' ? 'Menunggu' : r.status === 'approved' ? 'Disetujui' : 'Ditolak'}
+                              </span>
                             </div>
-                            <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
-                              <button
-                                onClick={() => handleEdit('pets', pet)}
-                                className="flex-1 sm:flex-none px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm"
-                              >
-                                ✏️ Edit
-                              </button>
-                              <button
-                                onClick={() => handleDelete('pets', pet.id, pet.name)}
-                                className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
-                              >
-                                🗑️ Hapus
-                              </button>
+                            
+                            {/* Main Content */}
+                            <div className="p-4">
+                              {/* Pet Info with Image */}
+                              <div className="mb-4">
+                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">🐾 Data Hewan</h4>
+                                <div className="flex flex-col sm:flex-row gap-4">
+                                  {r.pet_image_url && (
+                                    <img 
+                                      src={r.pet_image_url} 
+                                      alt={r.pet_name}
+                                      className="w-full sm:w-40 h-40 object-cover rounded-lg"
+                                    />
+                                  )}
+                                  <div className="flex-1">
+                                    <p className="text-xl font-bold text-gray-800">{r.pet_name}</p>
+                                    <p className="text-gray-600"><span className="font-semibold">Jenis:</span> {r.pet_type}</p>
+                                    {r.pet_age && <p className="text-gray-600"><span className="font-semibold">Umur:</span> {r.pet_age} tahun</p>}
+                                    {r.pet_description && <p className="text-gray-600 mt-2"><span className="font-semibold">Deskripsi:</span> {r.pet_description}</p>}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <hr className="my-4" />
+
+                              {/* Adopter Info */}
+                              <div className="mb-4">
+                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">👤 Data Pemohon</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                  <div>
+                                    <p className="text-gray-600"><span className="font-semibold">Nama:</span> {r.adopter?.full_name || r.adopter_name}</p>
+                                    <p className="text-gray-600"><span className="font-semibold">Email:</span> {r.adopter?.email || r.adopter_email}</p>
+                                    <p className="text-gray-600"><span className="font-semibold">Telepon:</span> {r.adopter?.phone || r.adopter_phone}</p>
+                                  </div>
+                                  {r.adopter?.message && (
+                                    <div>
+                                      <p className="text-gray-600"><span className="font-semibold">Pesan:</span></p>
+                                      <p className="text-gray-700 italic border-l-2 border-indigo-400 pl-2">{r.adopter.message}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {r.status === 'pending' && (
+                                <div className="mb-4">
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor={`admin-notes-${r.id}`}>
+                                    Admin Notes
+                                  </label>
+                                  <textarea
+                                    id={`admin-notes-${r.id}`}
+                                    rows="3"
+                                    value={requestNotes[r.id] || ''}
+                                    onChange={(e) => setRequestNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                                    placeholder="Tulis catatan untuk approval atau penolakan adopsi..."
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Review Info if exists */}
+                              {r.reviewed_at && (
+                                <>
+                                  <hr className="my-4" />
+                                  <div className="mb-4">
+                                    <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">✓ Review Admin</h4>
+                                    <p className="text-sm text-gray-600"><span className="font-semibold">Direvisi oleh:</span> {getReviewedByLabel(r)}</p>
+                                    <p className="text-sm text-gray-600"><span className="font-semibold">Tanggal Review:</span> {new Date(r.reviewed_at).toLocaleString('id-ID')}</p>
+                                    {r.admin_notes && <p className="text-sm text-gray-600 mt-1"><span className="font-semibold">Catatan:</span> {r.admin_notes}</p>}
+                                  </div>
+                                </>
+                              )}
+
+                              <hr className="my-4" />
+
+                              {/* Timeline */}
+                              <div className="mb-4">
+                                <p className="text-xs text-gray-500">Diminta: {new Date(r.requested_at).toLocaleString('id-ID')}</p>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            {r.status === 'pending' && (
+                              <div className="bg-gray-50 px-4 py-3 flex gap-3 border-t">
+                                <button 
+                                  onClick={() => approveRequest(r.id, requestNotes[r.id] || '')} 
+                                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm"
+                                >
+                                  ✓ Setujui
+                                </button>
+                                <button 
+                                  onClick={() => rejectRequest(r.id, requestNotes[r.id] || '')} 
+                                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-sm"
+                                >
+                                  ✗ Tolak
+                                </button>
+                              </div>
+                            )}
+                            {r.status !== 'pending' && (
+                              <div className="bg-gray-50 px-4 py-3 border-t text-center text-sm text-gray-600">
+                                Request sudah di-{r.status === 'approved' ? 'setujui' : 'tolak'} oleh {getReviewedByLabel(r)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    </div>
+                    )}
+
+                    {/* ADOPTED PETS VIEW */}
+                    {requestsView === 'adopted' && (
+                    <div>
+                    {loadingAdoptedPets ? (
+                      <div className="text-center py-12 text-gray-500">Memuat adopted pets...</div>
+                    ) : adoptedPets.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">Belum ada hewan yang diadopsi.</div>
+                    ) : (
+                      <div className="space-y-6">
+                        {adoptedPets.map((pet) => (
+                          <div key={pet.id} className="border border-green-300 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow bg-white">
+                            {/* Header with adoption date */}
+                            <div className="flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 border-b border-green-200">
+                              <h3 className="font-bold text-lg text-gray-800">✓ {pet.pet_name}</h3>
+                              <span className="px-3 py-1 rounded-full text-sm font-semibold bg-green-200 text-green-800">
+                                Diadopsi
+                              </span>
+                            </div>
+                            
+                            {/* Main Content */}
+                            <div className="p-4">
+                              {/* Pet Info with Image */}
+                              <div className="mb-4">
+                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">🐾 Data Hewan</h4>
+                                <div className="flex flex-col sm:flex-row gap-4">
+                                  {pet.pet_image_url && (
+                                    <img 
+                                      src={pet.pet_image_url} 
+                                      alt={pet.pet_name}
+                                      className="w-full sm:w-40 h-40 object-cover rounded-lg"
+                                    />
+                                  )}
+                                  <div className="flex-1">
+                                    <p className="text-xl font-bold text-gray-800">{pet.pet_name}</p>
+                                    <p className="text-gray-600"><span className="font-semibold">Jenis:</span> {pet.pet_type}</p>
+                                    {pet.pet_age && <p className="text-gray-600"><span className="font-semibold">Umur:</span> {pet.pet_age} tahun</p>}
+                                    {pet.pet_description && <p className="text-gray-600 mt-2"><span className="font-semibold">Deskripsi:</span> {pet.pet_description}</p>}
+                                    {pet.shelter_name && <p className="text-gray-600 mt-2"><span className="font-semibold">Dari Shelter:</span> {pet.shelter_name}</p>}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <hr className="my-4" />
+
+                              {/* Adopter Info */}
+                              <div className="mb-4">
+                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">👤 Data Adopter</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                  <div>
+                                    {pet.adopter_name ? (
+                                      <>
+                                        <p className="text-gray-600"><span className="font-semibold">Nama:</span> {pet.adopter_name}</p>
+                                        {pet.adopter_email && <p className="text-gray-600"><span className="font-semibold">Email:</span> {pet.adopter_email}</p>}
+                                        {pet.adopter_phone && <p className="text-gray-600"><span className="font-semibold">Telepon:</span> {pet.adopter_phone}</p>}
+                                      </>
+                                    ) : (
+                                      <p className="text-gray-500 italic">Informasi adopter tidak tersedia</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <hr className="my-4" />
+
+                              {/* Timeline */}
+                              <div className="mb-4">
+                                <p className="text-xs text-gray-500">Diadopsi: {new Date(pet.adoption_date || pet.created_at).toLocaleString('id-ID')}</p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        ))}
+                      </div>
+                    )}
+                    </div>
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {shelters.length === 0 ? (
-                      <div className="text-center py-12 text-gray-500">
-                        Belum ada data shelters. Tambahkan shelter pertama!
+                  <div>
+                    {loadingData ? (
+                      <div className="text-center py-12 text-gray-500">Memuat data...</div>
+                    ) : activeTab === 'pets' ? (
+                      <div className="space-y-4">
+                        {pets.length === 0 ? (
+                          <div className="text-center py-12 text-gray-500">Belum ada data pets. Tambahkan pet pertama!</div>
+                        ) : (
+                          pets.map((pet) => (
+                            <div key={pet.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                              <div className="flex flex-col sm:flex-row items-start gap-4">
+                                {pet.image_url && (
+                                  <img src={pet.image_url} alt={pet.name} className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-lg" />
+                                )}
+                                <div className="flex-1 w-full">
+                                  <h3 className="text-xl font-bold text-gray-800">{pet.name}</h3>
+                                  <p className="text-gray-600">Jenis: {pet.type}</p>
+                                  {pet.age && <p className="text-gray-600">Umur: {pet.age} tahun</p>}
+                                  {pet.description && <p className="text-gray-600 mt-2 line-clamp-2">{pet.description}</p>}
+                                  <p className="text-sm text-gray-500 mt-1">Shelter: {shelters.find(s => s.id === pet.shelter_id)?.name || 'Unknown'}</p>
+                                </div>
+                                <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
+                                  <button onClick={() => handleEdit('pets', pet)} className="flex-1 sm:flex-none px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm">✏️ Edit</button>
+                                  <button onClick={() => handleDelete('pets', pet.id, pet.name)} className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm">🗑️ Hapus</button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     ) : (
-                      shelters.map((shelter) => (
-                        <div key={shelter.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                          <div className="flex flex-col sm:flex-row items-start gap-4">
-                            {shelter.image_url && (
-                              <img 
-                                src={shelter.image_url} 
-                                alt={shelter.name}
-                                className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-lg"
-                              />
-                            )}
-                            <div className="flex-1 w-full">
-                              <h3 className="text-xl font-bold text-gray-800">{shelter.name}</h3>
-                              <p className="text-gray-600">📍 {shelter.city}</p>
-                              {shelter.address && <p className="text-gray-600 line-clamp-1">{shelter.address}</p>}
-                              {shelter.phone && <p className="text-gray-600">📞 {shelter.phone}</p>}
+                      <div className="space-y-4">
+                        {shelters.length === 0 ? (
+                          <div className="text-center py-12 text-gray-500">Belum ada data shelters. Tambahkan shelter pertama!</div>
+                        ) : (
+                          shelters.map((shelter) => (
+                            <div key={shelter.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                              <div className="flex flex-col sm:flex-row items-start gap-4">
+                                {shelter.image_url && (
+                                  <img src={shelter.image_url} alt={shelter.name} className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-lg" />
+                                )}
+                                <div className="flex-1 w-full">
+                                  <h3 className="text-xl font-bold text-gray-800">{shelter.name}</h3>
+                                  <p className="text-gray-600">📍 {shelter.city}</p>
+                                  {shelter.address && <p className="text-gray-600 line-clamp-1">{shelter.address}</p>}
+                                  {shelter.phone && <p className="text-gray-600">📞 {shelter.phone}</p>}
+                                </div>
+                                <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
+                                  <button onClick={() => handleEdit('shelters', shelter)} className="flex-1 sm:flex-none px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm">✏️ Edit</button>
+                                  <button onClick={() => handleDelete('shelters', shelter.id, shelter.name)} className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm">🗑️ Hapus</button>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
-                              <button
-                                onClick={() => handleEdit('shelters', shelter)}
-                                className="flex-1 sm:flex-none px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm"
-                              >
-                                ✏️ Edit
-                              </button>
-                              <button
-                                onClick={() => handleDelete('shelters', shelter.id, shelter.name)}
-                                className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
-                              >
-                                🗑️ Hapus
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
+                          ))
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
