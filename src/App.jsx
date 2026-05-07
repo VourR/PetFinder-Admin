@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import InstallPWA from './components/InstallPWA';
 
-const API_BASE_URL = "http://localhost:4000"; // Ganti dengan URL backend Anda
+const API_BASE_URL = "https://paw-find-api.vercel.app/";
 function App() {
   const [activeTab, setActiveTab] = useState('pets');
   const [view, setView] = useState('list'); // 'list' or 'form'
@@ -125,7 +125,7 @@ function App() {
     resetForms();
   }, [activeTab, adminToken]);
 
-  // persist admin token
+  // persist admin tokenis
   useEffect(() => {
     if (adminToken) localStorage.setItem('adminToken', adminToken);
     else localStorage.removeItem('adminToken');
