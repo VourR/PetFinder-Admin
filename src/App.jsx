@@ -62,6 +62,31 @@ function App() {
     );
   };
 
+  const getPetData = (request) => {
+    // Handle various possible data structures from API
+    const pet = request.pet || {};
+    return {
+      name: request.pet_name || pet.name || request.petName || 'N/A',
+      type: request.pet_type || pet.type || request.petType || 'N/A',
+      age: request.pet_age || pet.age || request.petAge || null,
+      description: request.pet_description || pet.description || request.petDescription || null,
+      imageUrl: request.pet_image_url || request.pet_image || pet.image_url || pet.image || request.petImageUrl || null,
+      shelterId: request.shelter_id || pet.shelter_id || request.shelterId || null,
+      shelterName: request.shelter_name || pet.shelter_name || request.shelterName || null
+    };
+  };
+
+  const getAdopterData = (request) => {
+    // Handle various possible data structures from API
+    const adopter = request.adopter || {};
+    return {
+      name: request.adopter_name || adopter.full_name || adopter.name || request.adopterName || 'N/A',
+      email: request.adopter_email || adopter.email || request.adopterEmail || 'N/A',
+      phone: request.adopter_phone || adopter.phone || request.adopterPhone || 'N/A',
+      message: adopter.message || request.adopter_message || request.adopterMessage || null
+    };
+  };
+
   const resetForms = () => {
     setPetForm({
       name: '',
@@ -195,7 +220,12 @@ function App() {
       });
       if (!res.ok) throw new Error('Gagal mengambil requests');
       const data = await res.json();
-      setRequests(data.data || data.requests || data || []);
+      const requestsList = data.data || data.requests || data || [];
+      console.log('Requests fetched:', requestsList);
+      if (requestsList.length > 0) {
+        console.log('First request structure:', requestsList[0]);
+      }
+      setRequests(requestsList);
     } catch (error) {
       showMessage('error', `Error: ${error.message}`);
     } finally {
@@ -748,44 +778,56 @@ function App() {
                             {/* Main Content */}
                             <div className="p-4">
                               {/* Pet Info with Image */}
-                              <div className="mb-4">
-                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">🐾 Data Hewan</h4>
-                                <div className="flex flex-col sm:flex-row gap-4">
-                                  {r.pet_image_url && (
-                                    <img 
-                                      src={r.pet_image_url} 
-                                      alt={r.pet_name}
-                                      className="w-full sm:w-40 h-40 object-cover rounded-lg"
-                                    />
-                                  )}
-                                  <div className="flex-1">
-                                    <p className="text-xl font-bold text-gray-800">{r.pet_name}</p>
-                                    <p className="text-gray-600"><span className="font-semibold">Jenis:</span> {r.pet_type}</p>
-                                    {r.pet_age && <p className="text-gray-600"><span className="font-semibold">Umur:</span> {r.pet_age} tahun</p>}
-                                    {r.pet_description && <p className="text-gray-600 mt-2"><span className="font-semibold">Deskripsi:</span> {r.pet_description}</p>}
+                              {(() => {
+                                const petData = getPetData(r);
+                                return (
+                                  <div className="mb-4">
+                                    <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">🐾 Data Hewan</h4>
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                      {petData.imageUrl && (
+                                        <img 
+                                          src={petData.imageUrl} 
+                                          alt={petData.name}
+                                          className="w-full sm:w-40 h-40 object-cover rounded-lg"
+                                          onError={(e) => { e.target.style.display = 'none'; }}
+                                        />
+                                      )}
+                                      <div className="flex-1">
+                                        <p className="text-xl font-bold text-gray-800">{petData.name}</p>
+                                        <p className="text-gray-600"><span className="font-semibold">Jenis:</span> {petData.type}</p>
+                                        {petData.age && <p className="text-gray-600"><span className="font-semibold">Umur:</span> {petData.age} tahun</p>}
+                                        {petData.description && <p className="text-gray-600 mt-2"><span className="font-semibold">Deskripsi:</span> {petData.description}</p>}
+                                        {petData.shelterName && <p className="text-gray-600 mt-2"><span className="font-semibold">Dari Shelter:</span> {petData.shelterName}</p>}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
+                                );
+                              })()}
 
                               <hr className="my-4" />
 
                               {/* Adopter Info */}
-                              <div className="mb-4">
-                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">👤 Data Pemohon</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                  <div>
-                                    <p className="text-gray-600"><span className="font-semibold">Nama:</span> {r.adopter?.full_name || r.adopter_name}</p>
-                                    <p className="text-gray-600"><span className="font-semibold">Email:</span> {r.adopter?.email || r.adopter_email}</p>
-                                    <p className="text-gray-600"><span className="font-semibold">Telepon:</span> {r.adopter?.phone || r.adopter_phone}</p>
-                                  </div>
-                                  {r.adopter?.message && (
-                                    <div>
-                                      <p className="text-gray-600"><span className="font-semibold">Pesan:</span></p>
-                                      <p className="text-gray-700 italic border-l-2 border-indigo-400 pl-2">{r.adopter.message}</p>
+                              {(() => {
+                                const adopterData = getAdopterData(r);
+                                return (
+                                  <div className="mb-4">
+                                    <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">👤 Data Pemohon</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                      <div>
+                                        <p className="text-gray-600"><span className="font-semibold">Nama:</span> {adopterData.name}</p>
+                                        {adopterData.email !== 'N/A' && <p className="text-gray-600"><span className="font-semibold">Email:</span> {adopterData.email}</p>}
+                                        {adopterData.phone !== 'N/A' && <p className="text-gray-600"><span className="font-semibold">Telepon:</span> {adopterData.phone}</p>}
+                                      </div>
+                                      {adopterData.message && (
+                                        <div>
+                                          <p className="text-gray-600"><span className="font-semibold">Pesan:</span></p>
+                                          <p className="text-gray-700 italic border-l-2 border-indigo-400 pl-2">{adopterData.message}</p>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              </div>
+                                  </div>
+                                );
+                              })()}
 
                               {r.status === 'pending' && (
                                 <div className="mb-4">
@@ -875,45 +917,56 @@ function App() {
                             {/* Main Content */}
                             <div className="p-4">
                               {/* Pet Info with Image */}
-                              <div className="mb-4">
-                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">🐾 Data Hewan</h4>
-                                <div className="flex flex-col sm:flex-row gap-4">
-                                  {pet.pet_image_url && (
-                                    <img 
-                                      src={pet.pet_image_url} 
-                                      alt={pet.pet_name}
-                                      className="w-full sm:w-40 h-40 object-cover rounded-lg"
-                                    />
-                                  )}
-                                  <div className="flex-1">
-                                    <p className="text-xl font-bold text-gray-800">{pet.pet_name}</p>
-                                    <p className="text-gray-600"><span className="font-semibold">Jenis:</span> {pet.pet_type}</p>
-                                    {pet.pet_age && <p className="text-gray-600"><span className="font-semibold">Umur:</span> {pet.pet_age} tahun</p>}
-                                    {pet.pet_description && <p className="text-gray-600 mt-2"><span className="font-semibold">Deskripsi:</span> {pet.pet_description}</p>}
-                                    {pet.shelter_name && <p className="text-gray-600 mt-2"><span className="font-semibold">Dari Shelter:</span> {pet.shelter_name}</p>}
+                              {(() => {
+                                const petData = getPetData(pet);
+                                return (
+                                  <div className="mb-4">
+                                    <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">🐾 Data Hewan</h4>
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                      {petData.imageUrl && (
+                                        <img 
+                                          src={petData.imageUrl} 
+                                          alt={petData.name}
+                                          className="w-full sm:w-40 h-40 object-cover rounded-lg"
+                                          onError={(e) => { e.target.style.display = 'none'; }}
+                                        />
+                                      )}
+                                      <div className="flex-1">
+                                        <p className="text-xl font-bold text-gray-800">{petData.name}</p>
+                                        <p className="text-gray-600"><span className="font-semibold">Jenis:</span> {petData.type}</p>
+                                        {petData.age && <p className="text-gray-600"><span className="font-semibold">Umur:</span> {petData.age} tahun</p>}
+                                        {petData.description && <p className="text-gray-600 mt-2"><span className="font-semibold">Deskripsi:</span> {petData.description}</p>}
+                                        {petData.shelterName && <p className="text-gray-600 mt-2"><span className="font-semibold">Dari Shelter:</span> {petData.shelterName}</p>}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
+                                );
+                              })()}
 
                               <hr className="my-4" />
 
                               {/* Adopter Info */}
-                              <div className="mb-4">
-                                <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">👤 Data Adopter</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                  <div>
-                                    {pet.adopter_name ? (
-                                      <>
-                                        <p className="text-gray-600"><span className="font-semibold">Nama:</span> {pet.adopter_name}</p>
-                                        {pet.adopter_email && <p className="text-gray-600"><span className="font-semibold">Email:</span> {pet.adopter_email}</p>}
-                                        {pet.adopter_phone && <p className="text-gray-600"><span className="font-semibold">Telepon:</span> {pet.adopter_phone}</p>}
-                                      </>
-                                    ) : (
-                                      <p className="text-gray-500 italic">Informasi adopter tidak tersedia</p>
-                                    )}
+                              {(() => {
+                                const adopterData = getAdopterData(pet);
+                                return (
+                                  <div className="mb-4">
+                                    <h4 className="font-bold text-gray-600 text-sm mb-2 uppercase">👤 Data Adopter</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                      <div>
+                                        {adopterData.name !== 'N/A' ? (
+                                          <>
+                                            <p className="text-gray-600"><span className="font-semibold">Nama:</span> {adopterData.name}</p>
+                                            {adopterData.email !== 'N/A' && <p className="text-gray-600"><span className="font-semibold">Email:</span> {adopterData.email}</p>}
+                                            {adopterData.phone !== 'N/A' && <p className="text-gray-600"><span className="font-semibold">Telepon:</span> {adopterData.phone}</p>}
+                                          </>
+                                        ) : (
+                                          <p className="text-gray-500 italic">Informasi adopter tidak tersedia</p>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
+                                );
+                              })()}
 
                               <hr className="my-4" />
 
