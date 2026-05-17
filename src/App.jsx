@@ -87,6 +87,17 @@ function App() {
     };
   };
 
+  const getAdminAuthHeaders = (extraHeaders = {}) => {
+    if (!adminToken) {
+      throw new Error('Sesi admin tidak ditemukan. Silakan login ulang.');
+    }
+
+    return {
+      Authorization: `Bearer ${adminToken}`,
+      ...extraHeaders
+    };
+  };
+
   const resetForms = () => {
     setPetForm({
       name: '',
@@ -317,6 +328,7 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/pets`, {
         method: 'POST',
+        headers: getAdminAuthHeaders(),
         body: formData
       });
 
@@ -357,6 +369,7 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/pets/${editId}`, {
         method: 'PUT',
+        headers: getAdminAuthHeaders(),
         body: formData
       });
 
@@ -394,6 +407,7 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/shelters`, {
         method: 'POST',
+        headers: getAdminAuthHeaders(),
         body: formData
       });
 
@@ -432,6 +446,7 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/shelters/${editId}`, {
         method: 'PUT',
+        headers: getAdminAuthHeaders(),
         body: formData
       });
 
@@ -461,7 +476,8 @@ function App() {
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/${type}/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAdminAuthHeaders()
       });
 
       // Check if response is ok or if it returns 204 No Content
